@@ -97,9 +97,11 @@
     // Connect to another peer using the entered Peer ID
     document.getElementById('connectButton').addEventListener('click', function() {
       const peerId = document.getElementById('peerIdInput').value;
-      if (peerId) {
+      if (peerId && !currentConnection) {
         const conn = peer.connect(peerId);
         setupConnectionHandlers(conn);
+      } else if (currentConnection) {
+        alert('You are already connected to a peer!');
       }
     });
 
@@ -112,6 +114,7 @@
         }
       });
 
+      // Enable send button after successful connection
       document.getElementById('sendButton').disabled = false;
     }
 
@@ -178,6 +181,9 @@
         link.download = fileName;
         link.click();
         console.log('Received file: ' + fileName);
+
+        // Reset for next file
+        resetProgressBar();
       }
     }
 
@@ -188,6 +194,18 @@
       const percentage = (currentChunk / totalChunks) * 100;
       progressBar.style.width = `${percentage}%`;
       progressText.textContent = `${Math.round(percentage)}%`;
+    }
+
+    // Reset progress bar
+    function resetProgressBar() {
+      const progressBar = document.getElementById('progressBar').firstElementChild;
+      const progressText = document.getElementById('progressText');
+      progressBar.style.width = '0%';
+      progressText.textContent = '0%';
+      receivedChunks = [];
+      totalChunks = 0;
+      currentChunk = 0;
+      fileName = '';
     }
   </script>
 
