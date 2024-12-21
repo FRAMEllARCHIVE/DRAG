@@ -1,128 +1,305 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PeerJS Dark Mode Connection</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #121212;
-            color: #e0e0e0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            flex-direction: column;
-        }
-        h1 {
-            color: #ffcc00;
-        }
-        .container {
-            text-align: center;
-            padding: 20px;
-            background-color: #333;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        }
-        .peer-id {
-            font-size: 1.2em;
-            font-weight: bold;
-            word-break: break-word;
-            margin: 20px 0;
-            color: #81c784;
-        }
-        input, button {
-            padding: 10px;
-            margin-top: 10px;
-            font-size: 1em;
-            border-radius: 5px;
-            border: 1px solid #444;
-            background-color: #444;
-            color: #e0e0e0;
-        }
-        input:focus, button:focus {
-            outline: none;
-            border-color: #ffcc00;
-        }
-        button {
-            background-color: #ffcc00;
-            color: #121212;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #ffb300;
-        }
-        #connection-status {
-            margin-top: 20px;
-            color: #ff7043;
-        }
-    </style>
+<html><head><base href="." />
+<title>P2P File Sharing</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #f0f2f5;
+    }
+
+    .container {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .peer-info {
+        background: #e3f2fd;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 10px 0;
+    }
+
+    .connection-section {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 10px 0;
+    }
+
+    button {
+        background: #2196f3;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+        transition: background 0.3s;
+    }
+
+    button:hover {
+        background: #1976d2;
+    }
+
+    #fileInput {
+        margin: 10px 0;
+    }
+
+    .progress {
+        width: 100%;
+        height: 20px;
+        background: #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+
+    .progress-bar {
+        width: 0%;
+        height: 100%;
+        background: #4caf50;
+        transition: width 0.3s;
+    }
+
+    .status {
+        color: #666;
+        margin: 10px 0;
+    }
+
+    .copy-btn {
+        background: #4caf50;
+    }
+
+    #receivedFiles {
+        margin-top: 20px;
+    }
+
+    .file-item {
+        background: #f8f9fa;
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+</style>
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>PeerJS Dark Mode Connection</h1>
-        <p>Your Peer ID:</p>
-        <div class="peer-id" id="peer-id"></div>
-        <button onclick="copyPeerId()">Copy Peer ID</button>
+        <h1>P2P File Sharing</h1>
         
-        <h2>Connect to Another Peer</h2>
-        <input type="text" id="connect-peer-id" placeholder="Enter Peer ID to connect" />
-        <button onclick="connectToPeer()">Connect</button>
+        <div class="peer-info">
+            <h3>Your Peer ID:</h3>
+            <div id="pid"></div>
+            <button class="copy-btn" onclick="copyPeerID()">Copy ID</button>
+        </div>
 
-        <div id="connection-status"></div>
+        <div class="connection-section">
+            <h3>Connect to Peer</h3>
+            <input type="text" id="connectionInput" placeholder="Enter peer ID">
+            <button onclick="connectToPeer()">Connect</button>
+        </div>
+
+        <div id="connectionStatus" class="status"></div>
+
+        <div id="fileSharing" style="display: none;">
+            <h3>Share Files</h3>
+            <input type="file" id="fileInput" multiple>
+            <button onclick="sendFiles()">Send Files</button>
+            
+            <div class="progress">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <div id="transferStatus" class="status"></div>
+        </div>
+
+        <div id="receivedFiles">
+            <h3>Received Files</h3>
+        </div>
     </div>
 
-    <!-- Include PeerJS CDN -->
-    <script src="https://cdn.peerjs.com/peerjs-1.3.1.min.js"></script>
-    <script>
-        // Create a new peer with a random ID
-        const peer = new Peer({
-            host: 'peerjs.com', // Use the PeerJS cloud server
-            secure: true,
-            port: 443,
-            path: '/myapp',
+<script>
+let peer = null;
+let conn = null;
+const CHUNK_SIZE = 16384; // 16KB chunks
+
+// Initialize peer connection
+function initPeer() {
+    peer = new Peer();
+    
+    peer.on('open', (id) => {
+        document.getElementById('pid').textContent = id;
+    });
+
+    peer.on('connection', (connection) => {
+        conn = connection;
+        setupConnection();
+    });
+
+    peer.on('error', (err) => {
+        console.error(err);
+        document.getElementById('connectionStatus').textContent = `Error: ${err.message}`;
+    });
+}
+
+function connectToPeer() {
+    const peerId = document.getElementById('connectionInput').value;
+    if (!peerId) {
+        alert('Please enter a peer ID');
+        return;
+    }
+
+    conn = peer.connect(peerId);
+    setupConnection();
+}
+
+function setupConnection() {
+    conn.on('open', () => {
+        document.getElementById('connectionStatus').textContent = 'Connected!';
+        document.getElementById('fileSharing').style.display = 'block';
+        
+        conn.on('data', handleReceivedData);
+    });
+
+    conn.on('error', (err) => {
+        console.error(err);
+        document.getElementById('connectionStatus').textContent = `Connection error: ${err.message}`;
+    });
+}
+
+let fileQueue = [];
+let currentFileTransfer = null;
+
+async function sendFiles() {
+    const fileInput = document.getElementById('fileInput');
+    const files = fileInput.files;
+    
+    if (files.length === 0) return;
+
+    for (let file of files) {
+        fileQueue.push(file);
+    }
+
+    if (!currentFileTransfer) {
+        processFileQueue();
+    }
+}
+
+async function processFileQueue() {
+    if (fileQueue.length === 0) {
+        currentFileTransfer = null;
+        return;
+    }
+
+    const file = fileQueue.shift();
+    currentFileTransfer = {
+        name: file.name,
+        size: file.size,
+        type: file.type
+    };
+
+    // Send file metadata first
+    conn.send({
+        type: 'file-meta',
+        file: currentFileTransfer
+    });
+
+    const chunkCount = Math.ceil(file.size / CHUNK_SIZE);
+    const reader = new FileReader();
+    let offset = 0;
+
+    reader.onload = (e) => {
+        conn.send({
+            type: 'file-chunk',
+            data: e.target.result,
+            offset: offset
         });
 
-        const peerIdElement = document.getElementById('peer-id');
-        const connectionStatus = document.getElementById('connection-status');
+        offset += e.target.result.byteLength;
+        const progress = (offset / file.size) * 100;
+        document.getElementById('progressBar').style.width = `${progress}%`;
+        document.getElementById('transferStatus').textContent = 
+            `Sending ${file.name}: ${Math.round(progress)}%`;
 
-        // Display the peer ID once it's generated
-        peer.on('open', function(id) {
-            peerIdElement.textContent = id;
-        });
-
-        // Function to copy the Peer ID to clipboard
-        function copyPeerId() {
-            const textArea = document.createElement('textarea');
-            textArea.value = peer.id;
-            document.body.appendChild(textArea);
-            textArea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textArea);
-            alert('Peer ID copied to clipboard!');
-        }
-
-        // Function to connect to another peer using a provided peer ID
-        function connectToPeer() {
-            const peerIdToConnect = document.getElementById('connect-peer-id').value.trim();
-            if (peerIdToConnect === '') {
-                alert('Please enter a valid Peer ID!');
-                return;
+        if (offset < file.size) {
+            readNextChunk();
+        } else {
+            if (fileQueue.length > 0) {
+                processFileQueue();
+            } else {
+                currentFileTransfer = null;
+                document.getElementById('transferStatus').textContent = 'Transfer complete!';
             }
-
-            const conn = peer.connect(peerIdToConnect);
-            conn.on('open', () => {
-                connectionStatus.textContent = `Connected to peer: ${peerIdToConnect}`;
-                connectionStatus.style.color = '#66bb6a';
-            });
-
-            conn.on('error', (err) => {
-                connectionStatus.textContent = `Failed to connect: ${err}`;
-                connectionStatus.style.color = '#e53935';
-            });
         }
-    </script>
-</body>
-</html>
+    };
+
+    function readNextChunk() {
+        const slice = file.slice(offset, offset + CHUNK_SIZE);
+        reader.readAsArrayBuffer(slice);
+    }
+
+    readNextChunk();
+}
+
+let receivingFile = null;
+let receivedChunks = [];
+
+function handleReceivedData(data) {
+    if (data.type === 'file-meta') {
+        receivingFile = data.file;
+        receivedChunks = [];
+        document.getElementById('transferStatus').textContent = 
+            `Receiving ${receivingFile.name}...`;
+    }
+    else if (data.type === 'file-chunk') {
+        receivedChunks.push(data.data);
+        const received = receivedChunks.reduce((acc, chunk) => acc + chunk.byteLength, 0);
+        const progress = (received / receivingFile.size) * 100;
+        document.getElementById('progressBar').style.width = `${progress}%`;
+        
+        if (received >= receivingFile.size) {
+            const blob = new Blob(receivedChunks, { type: receivingFile.type });
+            displayReceivedFile(blob, receivingFile.name);
+            receivingFile = null;
+            receivedChunks = [];
+        }
+    }
+}
+
+function displayReceivedFile(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = fileName;
+    
+    const downloadBtn = document.createElement('a');
+    downloadBtn.href = url;
+    downloadBtn.download = fileName;
+    downloadBtn.textContent = 'Download';
+    downloadBtn.className = 'button';
+    
+    div.appendChild(nameSpan);
+    div.appendChild(downloadBtn);
+    
+    document.getElementById('receivedFiles').appendChild(div);
+}
+
+function copyPeerID() {
+    const pid = document.getElementById('pid').textContent;
+    navigator.clipboard.writeText(pid).then(() => {
+        alert('Peer ID copied to clipboard!');
+    });
+}
+
+// Initialize when page loads
+window.onload = initPeer;
+</script>
+</body></html>
