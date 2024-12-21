@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PeerJS File Sharing</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #fileInput {
+      margin-top: 10px;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #666;
+    }
+    #peerId {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+  </style>
+  <!-- Correct PeerJS CDN -->
+  <script src="https://cdn.peerjs.com/peerjs.min.js"></script>
+</head>
+<body>
+
+  <h2>PeerJS File Sharing</h2>
+  
+  <div>
+    <label for="fileInput">Choose a file to send:</label>
+    <input type="file" id="fileInput">
+    <button id="sendButton" disabled>Send File</button>
+  </div>
+
+  <div>
+    <label for="peerIdInput">Enter Peer ID to connect to:</label>
+    <input type="text" id="peerIdInput">
+    <button id="connectButton">Connect</button>
+  </div>
+
+  <div id="peerId">Your Peer ID: </div>
+  <div id="status">Status: Waiting for peer connection...</div>
+
+  <script>
+    const peer = new Peer({
+      host: 'peerjs.com',
+      port: 9000,
+      path: '/myapp'
+    });
+
+    let currentConnection = null;
+
+    peer.on('open', function(id) {
+      document.getElementById('peerId').textContent = `Your Peer ID: ${id}`;
+      document.getElementById('status').textContent = `Status: Your Peer ID is ready to share.`;
+    });
+
+    peer.on('connection', function(conn) {
+      currentConnection = conn;
+      document.getElementById('status').textContent = 'Status: Connected to peer!';
+      setupConnectionHandlers(conn);
+    });
+
+    document.getElementById('connectButton').addEventListener('click', function() {
+      const peerId = document.getElementById('peerIdInput').value;
+      if (peerId) {
+        const conn = peer.connect(peerId);
+        setupConnectionHandlers(conn);
+      }
+    });
+
+    function setupConnectionHandlers(conn) {
+      currentConnection = conn;
+      document.getElementById('status').textContent = 'Status: Connected to peer!';
+      
+      conn.on('data', function(data) {
+        if (data.type === 'file') {
+          const blob = new Blob([data.file], { type: data.file.type });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = data.file.name;
+          link.click();
+          console.log('Received file: ' + data.file.name);
+        }
+      });
+      
+      document.getElementById('sendButton').disabled = false;
+    }
+
+    document.getElementById('sendButton').addEventListener('click', function() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+      if (file && currentConnection) {
+        const fileData = {
+          type: 'file',
+          file: file
+        };
+        currentConnection.send(fileData);
+        console.log('Sent file: ' + file.name);
+      }
+    });
+  </script>
+
+</body>
+</html>
