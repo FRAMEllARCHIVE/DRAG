@@ -89,6 +89,12 @@
     .file-label:hover {
         background: #218838;
     }
+
+    #qrcode canvas {
+        margin: 0 auto;
+        max-width: 100%;
+        height: auto;
+    }
 </style>
 </head>
 <body>
@@ -100,6 +106,7 @@
             <h2>Host Connection</h2>
             <button onclick="initializeHost()">Create New Session</button>
             <div id="qrcode"></div>
+            <p id="peer-id-display"></p>
         </div>
 
         <div id="client-controls">
@@ -133,9 +140,16 @@ function initializeHost() {
     peer = new Peer();
     
     peer.on('open', (id) => {
-        document.getElementById('connection-status').textContent = `Your ID: ${id}`;
+        // Display the peer ID
+        document.getElementById('peer-id-display').textContent = `Peer ID: ${id}`;
+        document.getElementById('connection-status').textContent = 'Waiting for connection...';
+        
         // Generate QR code with the peer ID
-        QRCode.toCanvas(document.getElementById('qrcode'), id, (error) => {
+        QRCode.toCanvas(document.getElementById('qrcode'), id, {
+            width: 256,
+            margin: 2,
+            errorCorrectionLevel: 'H'
+        }, (error) => {
             if (error) console.error(error);
         });
     });
@@ -169,6 +183,7 @@ function setupConnection() {
             chunksReceived = [];
             currentFileSize = data.fileSize;
             receivedSize = 0;
+            document.getElementById('transfer-status').textContent = 'Starting file transfer...';
         } else if (data.type === 'file-chunk') {
             // Receive chunk
             chunksReceived.push(data.chunk);
@@ -195,7 +210,12 @@ function setupConnection() {
 function sendFile() {
     const fileInput = document.getElementById('fileInput');
     const file = fileInput.files[0];
-    if (!file) return;
+    if (!file) {
+        alert('Please select a file first');
+        return;
+    }
+
+    document.getElementById('transfer-status').textContent = 'Starting file transfer...';
 
     // Send file header
     conn.send({
