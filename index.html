@@ -1,261 +1,162 @@
-<html><head><base href="." target="_blank"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>P2P File Sharing with QR Code</title>
-
-<!-- Include necessary libraries -->
-<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode.js@1.0.0/qrcode.min.js"></script>
-
-<style>
-    body {
-        font-family: Arial, sans-serif;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        background: #f0f2f5;
-    }
-
-    .container {
-        background: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
-
-    #qrcode {
-        text-align: center;
-        margin: 20px 0;
-    }
-
-    .status {
-        padding: 10px;
-        margin: 10px 0;
-        border-radius: 5px;
-        text-align: center;
-    }
-
-    .connected {
-        background: #d4edda;
-        color: #155724;
-    }
-
-    .disconnected {
-        background: #f8d7da;
-        color: #721c24;
-    }
-
-    .progress-bar {
-        width: 100%;
-        height: 20px;
-        background: #f0f0f0;
-        border-radius: 10px;
-        overflow: hidden;
-        margin: 10px 0;
-    }
-
-    .progress {
-        width: 0%;
-        height: 100%;
-        background: #4CAF50;
-        transition: width 0.3s ease;
-    }
-
-    button {
-        background: #007bff;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 5px;
-        cursor: pointer;
-        margin: 5px;
-    }
-
-    button:hover {
-        background: #0056b3;
-    }
-
-    #fileInput {
-        display: none;
-    }
-
-    .file-label {
-        display: inline-block;
-        padding: 10px 20px;
-        background: #28a745;
-        color: white;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-
-    .file-label:hover {
-        background: #218838;
-    }
-
-    #qrcode canvas {
-        margin: 0 auto;
-        max-width: 100%;
-        height: auto;
-    }
-</style>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeerJS File Sharing</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #E0E0E0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #1e1e1e;
+            width: 400px;
+        }
+        input, button {
+            background-color: #333;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #444;
+        }
+        .file-input {
+            background-color: #444;
+            width: 100%;
+            padding: 10px;
+            color: #fff;
+            margin: 10px 0;
+        }
+        .status {
+            color: #90EE90;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h1>P2P File Sharing</h1>
-        <div id="connection-status" class="status disconnected">Disconnected</div>
+        <h1>PeerJS File Sharing</h1>
+        <input id="peer-id" type="text" placeholder="Enter 4-digit Peer ID" maxlength="4">
+        <button id="host-btn">Host</button>
+        <button id="connect-btn" disabled>Connect</button>
         
-        <div id="host-controls">
-            <h2>Host Connection</h2>
-            <button onclick="initializeHost()">Create New Session</button>
-            <div id="qrcode"></div>
-            <p id="peer-id-display"></p>
-        </div>
+        <input type="file" id="file-input" class="file-input" disabled>
+        <button id="send-file-btn" class="file-input" disabled>Send File</button>
 
-        <div id="client-controls">
-            <h2>Join Session</h2>
-            <input type="text" id="peer-id-input" placeholder="Enter Peer ID">
-            <button onclick="connectToPeer()">Connect</button>
-        </div>
-
-        <div id="file-transfer" style="display: none;">
-            <h2>File Transfer</h2>
-            <input type="file" id="fileInput">
-            <label for="fileInput" class="file-label">Choose File</label>
-            <button onclick="sendFile()">Send File</button>
-            
-            <div class="progress-bar">
-                <div id="progress" class="progress"></div>
-            </div>
-            <div id="transfer-status"></div>
-        </div>
+        <div class="status" id="status"></div>
     </div>
 
-<script>
-let peer;
-let conn;
-let chunksReceived = [];
-let currentFileSize = 0;
-let receivedSize = 0;
-const CHUNK_SIZE = 16384; // 16KB chunks
+    <script src="https://cdn.peerjs.com/peerjs.min.js"></script>
+    <script>
+        let peer, conn, fileConnection;
+        const peerIdInput = document.getElementById("peer-id");
+        const hostButton = document.getElementById("host-btn");
+        const connectButton = document.getElementById("connect-btn");
+        const fileInput = document.getElementById("file-input");
+        const sendFileButton = document.getElementById("send-file-btn");
+        const statusDiv = document.getElementById("status");
 
-function initializeHost() {
-    peer = new Peer();
-    
-    peer.on('open', (id) => {
-        // Display the peer ID
-        document.getElementById('peer-id-display').textContent = `Peer ID: ${id}`;
-        document.getElementById('connection-status').textContent = 'Waiting for connection...';
-        
-        // Generate QR code with the peer ID
-        QRCode.toCanvas(document.getElementById('qrcode'), id, {
-            width: 256,
-            margin: 2,
-            errorCorrectionLevel: 'H'
-        }, (error) => {
-            if (error) console.error(error);
-        });
-    });
-
-    peer.on('connection', (connection) => {
-        conn = connection;
-        setupConnection();
-    });
-}
-
-function connectToPeer() {
-    const peerId = document.getElementById('peer-id-input').value;
-    peer = new Peer();
-    
-    peer.on('open', () => {
-        conn = peer.connect(peerId);
-        setupConnection();
-    });
-}
-
-function setupConnection() {
-    conn.on('open', () => {
-        document.getElementById('connection-status').className = 'status connected';
-        document.getElementById('connection-status').textContent = 'Connected!';
-        document.getElementById('file-transfer').style.display = 'block';
-    });
-
-    conn.on('data', (data) => {
-        if (data.type === 'file-header') {
-            // Initialize file reception
-            chunksReceived = [];
-            currentFileSize = data.fileSize;
-            receivedSize = 0;
-            document.getElementById('transfer-status').textContent = 'Starting file transfer...';
-        } else if (data.type === 'file-chunk') {
-            // Receive chunk
-            chunksReceived.push(data.chunk);
-            receivedSize += data.chunk.byteLength;
-            updateProgress(receivedSize / currentFileSize * 100);
-
-            if (receivedSize === currentFileSize) {
-                // File transfer complete
-                const blob = new Blob(chunksReceived);
-                const url = URL.createObjectURL(blob);
-                
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = data.fileName || 'downloaded-file';
-                a.click();
-                
-                URL.revokeObjectURL(url);
-                document.getElementById('transfer-status').textContent = 'Transfer complete!';
+        // Host a new peer
+        hostButton.addEventListener("click", () => {
+            const peerId = peerIdInput.value;
+            if (peerId.length !== 4) {
+                alert("Please enter a 4-digit Peer ID");
+                return;
             }
-        }
-    });
-}
 
-function sendFile() {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
-    if (!file) {
-        alert('Please select a file first');
-        return;
-    }
+            peer = new Peer(peerId, {
+                host: "peerjs-server.herokuapp.com", 
+                secure: true,
+                port: 443,
+            });
 
-    document.getElementById('transfer-status').textContent = 'Starting file transfer...';
+            peer.on("open", (id) => {
+                statusDiv.textContent = `You are hosting. Your Peer ID: ${id}`;
+                hostButton.disabled = true;
+                connectButton.disabled = false;
+            });
 
-    // Send file header
-    conn.send({
-        type: 'file-header',
-        fileSize: file.size,
-        fileName: file.name
-    });
+            peer.on("connection", (connection) => {
+                conn = connection;
+                setupFileSharing();
+            });
 
-    // Read and send file in chunks
-    const reader = new FileReader();
-    let offset = 0;
-
-    reader.onload = (e) => {
-        conn.send({
-            type: 'file-chunk',
-            chunk: e.target.result,
-            fileName: file.name
+            peer.on("error", (err) => {
+                statusDiv.textContent = `Error: ${err}`;
+            });
         });
-        offset += e.target.result.byteLength;
-        updateProgress(offset / file.size * 100);
 
-        if (offset < file.size) {
-            // Read next chunk
-            readNextChunk();
-        } else {
-            document.getElementById('transfer-status').textContent = 'Transfer complete!';
+        // Connect to a host peer
+        connectButton.addEventListener("click", () => {
+            const peerId = peerIdInput.value;
+            if (peerId.length !== 4) {
+                alert("Please enter a 4-digit Peer ID");
+                return;
+            }
+
+            peer = new Peer({
+                host: "peerjs-server.herokuapp.com", 
+                secure: true,
+                port: 443,
+            });
+
+            peer.on("open", (id) => {
+                statusDiv.textContent = `Your Peer ID: ${id}. Connecting to ${peerId}...`;
+                conn = peer.connect(peerId);
+                conn.on("open", () => {
+                    statusDiv.textContent = `Connected to ${peerId}`;
+                    setupFileSharing();
+                });
+
+                conn.on("data", (data) => {
+                    if (data.type === "file") {
+                        const link = document.createElement("a");
+                        link.href = URL.createObjectURL(data.file);
+                        link.download = data.filename;
+                        link.textContent = `Download ${data.filename}`;
+                        document.body.appendChild(link);
+                    }
+                });
+            });
+
+            peer.on("error", (err) => {
+                statusDiv.textContent = `Error: ${err}`;
+            });
+        });
+
+        // Setup file sharing UI and listeners
+        function setupFileSharing() {
+            fileInput.disabled = false;
+            sendFileButton.disabled = false;
+
+            sendFileButton.addEventListener("click", () => {
+                const file = fileInput.files[0];
+                if (file) {
+                    const fileData = {
+                        type: "file",
+                        file: file,
+                        filename: file.name,
+                    };
+                    conn.send(fileData);
+                    statusDiv.textContent = `Sent file: ${file.name}`;
+                }
+            });
         }
-    };
-
-    function readNextChunk() {
-        const slice = file.slice(offset, offset + CHUNK_SIZE);
-        reader.readAsArrayBuffer(slice);
-    }
-
-    readNextChunk();
-}
-
-function updateProgress(percent) {
-    document.getElementById('progress').style.width = `${percent}%`;
-    document.getElementById('transfer-status').textContent = `Transfer progress: ${Math.round(percent)}%`;
-}
-</script>
-</body></html>
+    </script>
+</body>
+</html>
