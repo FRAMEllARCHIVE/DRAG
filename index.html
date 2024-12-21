@@ -1,213 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PeerJS File Sharing</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    #fileInput {
-      margin-top: 10px;
-    }
-    #status {
-      margin-top: 20px;
-      font-size: 14px;
-      color: #666;
-    }
-    #peerId {
-      font-weight: bold;
-      margin-top: 10px;
-    }
-    #progressBar {
-      width: 100%;
-      background-color: #f3f3f3;
-      margin-top: 10px;
-    }
-    #progressBar div {
-      height: 20px;
-      background-color: #4caf50;
-      width: 0%;
-      text-align: center;
-      color: white;
-    }
-  </style>
-  <script src="https://cdn.peerjs.com/peerjs.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeerJS Dark Mode Connection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+        h1 {
+            color: #ffcc00;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        .peer-id {
+            font-size: 1.2em;
+            font-weight: bold;
+            word-break: break-word;
+            margin: 20px 0;
+            color: #81c784;
+        }
+        input, button {
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 1em;
+            border-radius: 5px;
+            border: 1px solid #444;
+            background-color: #444;
+            color: #e0e0e0;
+        }
+        input:focus, button:focus {
+            outline: none;
+            border-color: #ffcc00;
+        }
+        button {
+            background-color: #ffcc00;
+            color: #121212;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #ffb300;
+        }
+        #connection-status {
+            margin-top: 20px;
+            color: #ff7043;
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <h1>PeerJS Dark Mode Connection</h1>
+        <p>Your Peer ID:</p>
+        <div class="peer-id" id="peer-id"></div>
+        <button onclick="copyPeerId()">Copy Peer ID</button>
+        
+        <h2>Connect to Another Peer</h2>
+        <input type="text" id="connect-peer-id" placeholder="Enter Peer ID to connect" />
+        <button onclick="connectToPeer()">Connect</button>
 
-  <h2>PeerJS File Sharing</h2>
+        <div id="connection-status"></div>
+    </div>
 
-  <div>
-    <label for="fileInput">Choose a file to send:</label>
-    <input type="file" id="fileInput">
-    <button id="sendButton" disabled>Send File</button>
-  </div>
-
-  <div>
-    <label for="peerIdInput">Enter Peer ID to connect to:</label>
-    <input type="text" id="peerIdInput">
-    <button id="connectButton">Connect</button>
-  </div>
-
-  <div id="peerId">Your Peer ID: </div>
-  <div id="status">Status: Waiting for peer connection...</div>
-
-  <div id="progressBar">
-    <div id="progressText">0%</div>
-  </div>
-
-  <script>
-    const peer = new Peer({
-      host: 'peerjs.com',
-      port: 9000,
-      path: '/myapp'
-    });
-
-    let currentConnection = null;
-    let receivedChunks = [];
-    let totalChunks = 0;
-    let fileName = '';
-    let currentChunk = 0;
-    let file = null;
-
-    // Log when PeerJS opens a connection and assign the Peer ID
-    peer.on('open', function(id) {
-      console.log('Your Peer ID is: ' + id);  // Log the Peer ID for debugging
-      document.getElementById('peerId').textContent = `Your Peer ID: ${id}`;
-      document.getElementById('status').textContent = `Status: Your Peer ID is ready to share.`;
-    });
-
-    // Log any errors with PeerJS to troubleshoot connection issues
-    peer.on('error', function(err) {
-      console.error('PeerJS error:', err);
-      document.getElementById('status').textContent = `Status: Error - ${err.message}`;
-    });
-
-    // Set up a handler for incoming connections
-    peer.on('connection', function(conn) {
-      console.log('Incoming connection from: ' + conn.peer);  // Log the connecting peer's ID
-      currentConnection = conn;
-      document.getElementById('status').textContent = 'Status: Connected to peer!';
-      setupConnectionHandlers(conn);
-    });
-
-    // Connect to another peer using the entered Peer ID
-    document.getElementById('connectButton').addEventListener('click', function() {
-      const peerId = document.getElementById('peerIdInput').value;
-      if (peerId && !currentConnection) {
-        const conn = peer.connect(peerId);
-        setupConnectionHandlers(conn);
-      } else if (currentConnection) {
-        alert('You are already connected to a peer!');
-      }
-    });
-
-    // Handle connection and enable file sending button
-    function setupConnectionHandlers(conn) {
-      currentConnection = conn;
-      conn.on('data', function(data) {
-        if (data.type === 'file-chunk') {
-          handleReceivedChunk(data);
-        }
-      });
-
-      // Enable send button after successful connection
-      document.getElementById('sendButton').disabled = false;
-    }
-
-    // Send file chunks on button click
-    document.getElementById('sendButton').addEventListener('click', function() {
-      const fileInput = document.getElementById('fileInput');
-      file = fileInput.files[0];
-      if (file && currentConnection) {
-        sendFileInChunks(file);
-      }
-    });
-
-    // Function to send a large file in chunks
-    function sendFileInChunks(file) {
-      const CHUNK_SIZE = 1024 * 1024 * 10; // 10MB per chunk
-      totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-      currentChunk = 0;
-
-      function sendNextChunk() {
-        const start = currentChunk * CHUNK_SIZE;
-        const end = Math.min((currentChunk + 1) * CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
-
-        // Send chunk data with its index
-        currentConnection.send({
-          type: 'file-chunk',
-          chunk: chunk,
-          index: currentChunk,
-          totalChunks: totalChunks,
-          name: file.name
+    <!-- Include PeerJS CDN -->
+    <script src="https://cdn.peerjs.com/peerjs-1.3.1.min.js"></script>
+    <script>
+        // Create a new peer with a random ID
+        const peer = new Peer({
+            host: 'peerjs.com', // Use the PeerJS cloud server
+            secure: true,
+            port: 443,
+            path: '/myapp',
         });
 
-        console.log(`Sent chunk ${currentChunk + 1} of ${totalChunks}`);
-        updateProgressBar(currentChunk + 1);
+        const peerIdElement = document.getElementById('peer-id');
+        const connectionStatus = document.getElementById('connection-status');
 
-        currentChunk++;
+        // Display the peer ID once it's generated
+        peer.on('open', function(id) {
+            peerIdElement.textContent = id;
+        });
 
-        if (currentChunk < totalChunks) {
-          sendNextChunk();
-        } else {
-          console.log('File transfer complete');
+        // Function to copy the Peer ID to clipboard
+        function copyPeerId() {
+            const textArea = document.createElement('textarea');
+            textArea.value = peer.id;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('Peer ID copied to clipboard!');
         }
-      }
 
-      sendNextChunk();
-    }
+        // Function to connect to another peer using a provided peer ID
+        function connectToPeer() {
+            const peerIdToConnect = document.getElementById('connect-peer-id').value.trim();
+            if (peerIdToConnect === '') {
+                alert('Please enter a valid Peer ID!');
+                return;
+            }
 
-    // Handle incoming file chunks
-    function handleReceivedChunk(data) {
-      if (!fileName) {
-        fileName = data.name;
-        totalChunks = data.totalChunks;
-        receivedChunks = new Array(totalChunks); // initialize array to store chunks
-      }
+            const conn = peer.connect(peerIdToConnect);
+            conn.on('open', () => {
+                connectionStatus.textContent = `Connected to peer: ${peerIdToConnect}`;
+                connectionStatus.style.color = '#66bb6a';
+            });
 
-      receivedChunks[data.index] = data.chunk;
-      updateProgressBar(data.index + 1);
-
-      // If all chunks are received, reconstruct the file
-      if (receivedChunks.filter(chunk => chunk !== undefined).length === totalChunks) {
-        const fileBlob = new Blob(receivedChunks, { type: 'application/octet-stream' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(fileBlob);
-        link.download = fileName;
-        link.click();
-        console.log('Received file: ' + fileName);
-
-        // Reset for next file
-        resetProgressBar();
-      }
-    }
-
-    // Update progress bar
-    function updateProgressBar(currentChunk) {
-      const progressBar = document.getElementById('progressBar').firstElementChild;
-      const progressText = document.getElementById('progressText');
-      const percentage = (currentChunk / totalChunks) * 100;
-      progressBar.style.width = `${percentage}%`;
-      progressText.textContent = `${Math.round(percentage)}%`;
-    }
-
-    // Reset progress bar
-    function resetProgressBar() {
-      const progressBar = document.getElementById('progressBar').firstElementChild;
-      const progressText = document.getElementById('progressText');
-      progressBar.style.width = '0%';
-      progressText.textContent = '0%';
-      receivedChunks = [];
-      totalChunks = 0;
-      currentChunk = 0;
-      fileName = '';
-    }
-  </script>
-
+            conn.on('error', (err) => {
+                connectionStatus.textContent = `Failed to connect: ${err}`;
+                connectionStatus.style.color = '#e53935';
+            });
+        }
+    </script>
 </body>
 </html>
