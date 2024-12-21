@@ -21,14 +21,25 @@
       font-weight: bold;
       margin-top: 10px;
     }
+    #progressBar {
+      width: 100%;
+      background-color: #f3f3f3;
+      margin-top: 10px;
+    }
+    #progressBar div {
+      height: 20px;
+      background-color: #4caf50;
+      width: 0%;
+      text-align: center;
+      color: white;
+    }
   </style>
-  <!-- Correct PeerJS CDN -->
   <script src="https://cdn.peerjs.com/peerjs.min.js"></script>
 </head>
 <body>
 
   <h2>PeerJS File Sharing</h2>
-  
+
   <div>
     <label for="fileInput">Choose a file to send:</label>
     <input type="file" id="fileInput">
@@ -44,6 +55,10 @@
   <div id="peerId">Your Peer ID: </div>
   <div id="status">Status: Waiting for peer connection...</div>
 
+  <div id="progressBar">
+    <div id="progressText">0%</div>
+  </div>
+
   <script>
     const peer = new Peer({
       host: 'peerjs.com',
@@ -52,18 +67,34 @@
     });
 
     let currentConnection = null;
+    let receivedChunks = [];
+    let totalChunks = 0;
+    let fileName = '';
+    let currentChunk = 0;
+    let file = null;
 
+    // Log when PeerJS opens a connection and assign the Peer ID
     peer.on('open', function(id) {
+      console.log('Your Peer ID is: ' + id);  // Log the Peer ID for debugging
       document.getElementById('peerId').textContent = `Your Peer ID: ${id}`;
       document.getElementById('status').textContent = `Status: Your Peer ID is ready to share.`;
     });
 
+    // Log any errors with PeerJS to troubleshoot connection issues
+    peer.on('error', function(err) {
+      console.error('PeerJS error:', err);
+      document.getElementById('status').textContent = `Status: Error - ${err.message}`;
+    });
+
+    // Set up a handler for incoming connections
     peer.on('connection', function(conn) {
+      console.log('Incoming connection from: ' + conn.peer);  // Log the connecting peer's ID
       currentConnection = conn;
       document.getElementById('status').textContent = 'Status: Connected to peer!';
       setupConnectionHandlers(conn);
     });
 
+    // Connect to another peer using the entered Peer ID
     document.getElementById('connectButton').addEventListener('click', function() {
       const peerId = document.getElementById('peerIdInput').value;
       if (peerId) {
@@ -72,36 +103,92 @@
       }
     });
 
+    // Handle connection and enable file sending button
     function setupConnectionHandlers(conn) {
       currentConnection = conn;
-      document.getElementById('status').textContent = 'Status: Connected to peer!';
-      
       conn.on('data', function(data) {
-        if (data.type === 'file') {
-          const blob = new Blob([data.file], { type: data.file.type });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = data.file.name;
-          link.click();
-          console.log('Received file: ' + data.file.name);
+        if (data.type === 'file-chunk') {
+          handleReceivedChunk(data);
         }
       });
-      
+
       document.getElementById('sendButton').disabled = false;
     }
 
+    // Send file chunks on button click
     document.getElementById('sendButton').addEventListener('click', function() {
       const fileInput = document.getElementById('fileInput');
-      const file = fileInput.files[0];
+      file = fileInput.files[0];
       if (file && currentConnection) {
-        const fileData = {
-          type: 'file',
-          file: file
-        };
-        currentConnection.send(fileData);
-        console.log('Sent file: ' + file.name);
+        sendFileInChunks(file);
       }
     });
+
+    // Function to send a large file in chunks
+    function sendFileInChunks(file) {
+      const CHUNK_SIZE = 1024 * 1024 * 10; // 10MB per chunk
+      totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      currentChunk = 0;
+
+      function sendNextChunk() {
+        const start = currentChunk * CHUNK_SIZE;
+        const end = Math.min((currentChunk + 1) * CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+
+        // Send chunk data with its index
+        currentConnection.send({
+          type: 'file-chunk',
+          chunk: chunk,
+          index: currentChunk,
+          totalChunks: totalChunks,
+          name: file.name
+        });
+
+        console.log(`Sent chunk ${currentChunk + 1} of ${totalChunks}`);
+        updateProgressBar(currentChunk + 1);
+
+        currentChunk++;
+
+        if (currentChunk < totalChunks) {
+          sendNextChunk();
+        } else {
+          console.log('File transfer complete');
+        }
+      }
+
+      sendNextChunk();
+    }
+
+    // Handle incoming file chunks
+    function handleReceivedChunk(data) {
+      if (!fileName) {
+        fileName = data.name;
+        totalChunks = data.totalChunks;
+        receivedChunks = new Array(totalChunks); // initialize array to store chunks
+      }
+
+      receivedChunks[data.index] = data.chunk;
+      updateProgressBar(data.index + 1);
+
+      // If all chunks are received, reconstruct the file
+      if (receivedChunks.filter(chunk => chunk !== undefined).length === totalChunks) {
+        const fileBlob = new Blob(receivedChunks, { type: 'application/octet-stream' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(fileBlob);
+        link.download = fileName;
+        link.click();
+        console.log('Received file: ' + fileName);
+      }
+    }
+
+    // Update progress bar
+    function updateProgressBar(currentChunk) {
+      const progressBar = document.getElementById('progressBar').firstElementChild;
+      const progressText = document.getElementById('progressText');
+      const percentage = (currentChunk / totalChunks) * 100;
+      progressBar.style.width = `${percentage}%`;
+      progressText.textContent = `${Math.round(percentage)}%`;
+    }
   </script>
 
 </body>
