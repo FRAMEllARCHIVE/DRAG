@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Network File Sharing</title>
+</head>
+<body>
+    <h1>Local Network File Sharing</h1>
+    <input type="file" id="fileInput" />
+    <button id="sendFileButton">Send File</button>
+    <textarea id="status" rows="10" cols="50" readonly></textarea>
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const sendFileButton = document.getElementById('sendFileButton');
+        const status = document.getElementById('status');
+
+        let peerConnection;
+        let dataChannel;
+
+        const log = (message) => {
+            status.value += `${message}\n`;
+        };
+
+        const createPeerConnection = () => {
+            peerConnection = new RTCPeerConnection();
+
+            // Create a data channel for file transfer
+            dataChannel = peerConnection.createDataChannel("fileChannel");
+            dataChannel.onopen = () => log("Data channel is open.");
+            dataChannel.onmessage = (event) => {
+                log("Received data: " + event.data);
+                // Here you can handle incoming file chunks
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    log("Generated ICE candidate: " + JSON.stringify(event.candidate));
+                }
+            };
+
+            return peerConnection;
+        };
+
+        sendFileButton.addEventListener('click', async () => {
+            if (!fileInput.files.length) {
+                log("No file selected.");
+                return;
+            }
+            const file = fileInput.files[0];
+            log(`Selected file: ${file.name} (${file.size} bytes)`);
+
+            peerConnection = createPeerConnection();
+
+            // Offer to connect
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            log("Created and set local offer.");
+
+            // Here, you should exchange the SDP with the other peer manually or using a signaling server.
+            log("Please exchange SDP with the other peer.");
+        });
+
+        // Example function for handling SDP answer (manually paste for demo purposes)
+        window.setRemoteDescription = async (sdp) => {
+            const remoteDesc = new RTCSessionDescription(sdp);
+            await peerConnection.setRemoteDescription(remoteDesc);
+            log("Set remote description.");
+        };
+    </script>
+</body>
+</html>
