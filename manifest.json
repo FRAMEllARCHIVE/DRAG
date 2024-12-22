@@ -1,34 +1,20 @@
 {
-  "name": "DRAG - Cross-Platform File Sharing",
+  "name": "DRAG",  
   "short_name": "DRAG",
-  "description": "Seamlessly share files across different platforms using DRAG.",
-  "start_url": "/DRAG/",
-  "scope": "/DRAG/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0078D7",
-  "orientation": "any",
   "icons": [
-    {
-      "src": "512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    },
     {
       "src": "1024x1024.png",
       "sizes": "1024x1024",
       "type": "image/png"
+    },
+    {
+      "src": "512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ],
-  "lang": "en-US",
-  "features": [
-    "P2P file transfer",
-    "Cross-platform compatibility",
-    "Secure and private sharing"
-  ],
-  "categories": ["utilities", "productivity", "file-sharing"],
-  "permissions": [
-    "storage",
-    "network"
-  ]
+  "start_url": "https://framellarchive.github.io/DRAG/",
+"theme_color": "#000000",
+  "display": "standalone",
+      "capture_links": "new-client"
 }
